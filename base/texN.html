@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>three.js webgl - OBJLoader2 basic usage</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <script src="../lib/tween.umd.js"></script>
+    <script type="text/javascript" src="../lib/dat.min.js"></script>
+
+
+    <style>
+        #glFullscreen {
+            width: 100%;
+            height: 100vh;
+            min-width: 640px;
+            min-height: 360px;
+            position: relative;
+            overflow: hidden;
+            z-index: 0;
+        }
+        #example {
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            background-color: #000000;
+        }
+        #feedback {
+            color: darkorange;
+        }
+        #dat {
+            user-select: none;
+            position: absolute;
+            left: 0;
+            top: 0;
+            z-Index: 200;
+        }
+    </style>
+</head>
+<body>
+<div>
+<div  style="position: relative;"><div id="draggable" >
+    <a href ="https://webglreport.com/?v=2">https://webglreport.com/?v=2</a><div>ttt</div>
+</div></div>
+<div id="glFullscreen"><canvas id="example" style="position:relative;"></canvas></div>
+<div id="dat"></div>
+</div>
+<script type="module">
+    'use strict';
+    import * as THREE from 'https://threejs.org/build/three.module.js';
+    import Stats from 'https://threejs.org/examples/jsm/libs/stats.module.js';
+    import { TrackballControls } from "https://threejs.org/examples/jsm/controls/TrackballControls.js";
+    import {GLTFLoader} from 'https://threejs.org/examples/jsm/loaders/GLTFLoader.js';
+
+    import {getApp1, Timer2} from "../mylib/lib.js";
+    import {Effects} from "../mylib/effects.js";
+    import {Geom} from "../mylib/geom.js";
+    import {Debug} from "../mylib/debug.js";
+
+    var db = Debug(THREE);
+    import {MyTexture} from '../mylib/mytextures.js';
+    var mt = MyTexture(THREE);
+
+    let app = getApp1(THREE);
+    let effects;
+
+    app.loaded = false;
+    var exa = document.querySelector('#example');
+    app.geom = Geom(THREE, app);
+
+    function init2() {
+        app.initGraphics();
+        app.camera.position.set(10,1100,100);
+        app.camera.updateProjectionMatrix();
+        createObjects();
+        initInput();
+        app.resize();
+        app.stats = Stats();
+        app.stats.domElement.style ="position: absolute; top: 10px; left: 10px; z-index: 10000; opacity: 0.9";
+        glFullscreen.appendChild(app.stats.domElement);
+        render2();
+    }
+
+    function createObjects() {
+        effects = Effects({TWEEN: TWEEN, scene: app.scene});
+        app.elRows = 0;
+        app.elCols = 0;
+        app.nLights = 0;
+        app.obs = []; for (var i=0; i<app.elRows; i++) app.obs.push([]);
+        //var props = app.renderer.properties;
+
+        ///              DAT GUI
+        app.datExampleData = {
+            h1: 10
+        };
+        app.gui = new dat.gui.GUI();
+        app.gui.remember(app.datExampleData);
+        app.h1gui = app.gui.add(app.datExampleData, 'h1').min(0).max(20).step(1);
+        app.h1gui.onChange((e) => {
+            groundGeometry.attributes.position.array[5*3+2]=e;
+            groundGeometry.attributes.position.needsUpdate = true;
+        });
+
+        var planeSizeX = 222;
+        var planeSizeY = 555;
+
+
+        //                                              TEXTURES
+        const loader = new THREE.TextureLoader();
+        const shadowTexture = loader.load('teddy.jpg', (t) => t.needsUpdate = true);
+        mt.planeSizeX = planeSizeX;
+        mt.planeSizeY = planeSizeY;
+        var myMat = mt.createMaterial(mt.p1, shadowTexture);
+        //var tween1 = new TWEEN.Tween(mt.circles[0]).to({x: 150},2000).repeat(Infinity).start();
+        var ang2 = {a: 0}
+/*
+        var tween1 = new TWEEN.Tween(ang2).to({a: 6.28},2000).
+          onUpdate((e) => mt.circles[0].x = 25+10*Math.sin(e.a)).repeat(Infinity).start();
+
+        var tween2 = new TWEEN.Tween(ang2).to({a: 6.28},2000).
+        onUpdate((e) => mt.circles[1].x = 75+13*Math.sin(e.a)).repeat(Infinity).start();
+
+        var tween2r = new TWEEN.Tween(ang2).to({a: 6.28},2000).
+        onUpdate((e) => mt.circles[1].r = 13+2*Math.sin(e.a)).repeat(Infinity).start();
+*/
+        //                                             GROUND
+        var groundGeometry = new THREE.PlaneBufferGeometry(planeSizeX, planeSizeY, 146,146);
+        //var arr = groundGeometry.attributes.position.array;
+        var ground = new THREE.Mesh(groundGeometry, myMat);
+        ground.rotateX(-Math.PI/2);
+        ground.position.x=0;
+        ground.position.z=0;
+        app.ground = ground;
+        app.scene.add(ground);
+
+        //                                   GROUND PARABOLOID
+        var g2 = ground.geometry;
+        for (var i=0; i<g2.parameters.widthSegments; i++) {
+            for (var j =0; j< g2.parameters.heightSegments; j++) {
+                var {ar, adr} = getAAdr(g2, i, j);
+                let x = ar[adr + 0];
+                let y = ar[adr + 1];
+                ar[adr+2] = F(x, y);
+            }
+        }
+        function F(x, y) {
+            return (x*x + y*y) / 200; // Math.sqr(x)
+        };
+
+        //                                WIRE FRAME
+        var geo = new THREE.EdgesGeometry( ground.geometry ); // or WireframeGeometry
+        var mat = new THREE.LineBasicMaterial( { color: 0x000000, linewidth: 150 } );
+        var wireframe = new THREE.LineSegments( geo, mat );
+        ground.add( wireframe );
+        wireframe.y+=0.1
+
+
+        var claster = app.geom.clasterize(g2, 3, 3, 3);
+//db.print(claster)
+
+/*
+        // comment to no THREE.js shadows
+        app2.renderer.shadowMap.enabled = true;
+        app2.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        plane.receiveShadow = true;
+*/
+
+        //                                      OBJECTS FOR SHADOWS
+        for (var i=0; i<app.elRows; i++) {
+            for (var j=0; j<app.elCols; j++) {
+                var c = new THREE.Mesh(g, m2);
+                c.position.x= i*20;
+                c.position.z = j*20;
+                c.position.y = cubeSize/2;
+                c.castShadow = true;
+                app.obs[i][j] =c;
+                app.scene.add(app.obs[i][j]);
+            }
+        };
+
+        var ls = []; for (var i=0; i<app.nLights; i++) ls.push({});
+        app.lights = ls;
+
+        for (var i=0; i<app.lights.length; i++) {// color, intesity, distance, decay
+            var lb = effects.addLightBallParent( 0xffff00 + i*20, 2,    100,    1);
+            app.lights[i].lightBall = lb;
+            lb.li.castShadow = true;
+            //app2.scene.add(lb.li);
+            lb.position.x = 50;
+            lb.position.y = 50;
+            lb.position.z = i*15;
+            //lb.li.position.z = i*30;
+        }
+
+        for (var k =0; k<app.nLights; k++) {
+            for (var i=0; i<app.elRows; i++) {
+                for (var j=0; j<app.elCols; j++) {
+                    // comment no no shadows
+                    let l = addShadow5(app.ground, app.obs[i][j], app.lights[k].lightBall);
+                    shadows5.push(l);
+                }
+            }
+        }
+        //db.makeDrag(draggable);        dd = pt;        db.addDrag('Text2', app2.lights[1].lightBall);
+    }; // create Objects
+
+    var k = 7;
+    //db.print(k);
+    //db.print(mt.p1);
+
+    function getAAdr(geom, i, j) { // i - y, j - x
+        var arr = geom.attributes.position.array;
+        var nx = geom.parameters.widthSegments;
+        var ny = geom.parameters.heightSegments;
+        var addr = 3 * (i*nx + j);
+        return ({ar: arr, adr: addr});
+    };
+
+    function initInput() {
+        app.mouse = {};
+        app.controls = new TrackballControls( app.camera, app.renderer.domElement );
+        function onDocumentMouseMove( event ) {
+            event.preventDefault();
+            app.mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+            app.mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+        }
+        document.addEventListener( 'mousemove', onDocumentMouseMove, false );
+        var v0 = new THREE.Vector3(0,0,0);
+        var v1 = new THREE.Vector3(0,0,1);
+        app.raycaster = new THREE.Raycaster();
+        app.raycaster2 = new THREE.Raycaster(v0, v1, 0.1, 200);
+        app.controls.target.x = 0;
+        app.controls.target.z = 10;
+    }
+
+    var clock =new THREE.Clock();
+
+    let render2 = function () {
+        app.stats.update();
+        requestAnimationFrame( render2 );
+        if ( !app.renderer.autoClear ) app.renderer.clear();
+
+        app.controls.update();
+        //mt.addCircles(mt.p1.dd);
+
+
+
+
+
+        //for (var i=0; i< 15000; i++) mt.p1.dd.data[i] = 222;
+        mt.p1.uniforms.texData2.needsUpdate = true; // NO DATA,
+        mt.p1.dataTexture.needsUpdate = true; // but texture needs update
+        TWEEN.update(Date.now());
+        app.renderer.render( app.scene, app.camera );
+    }; // render
+
+
+    init2();
+
+
+</script>
+<script src="../mylib/mytextures.js"></script>
+<script src="../live.js"></script>
+
+</body>
+</html>

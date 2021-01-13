@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script src="../live.js"></script>
+</head>
+<body>
+<script>
+    var len = 1000000;
+    var abuf = new ArrayBuffer(len)
+    var bbuf = new ArrayBuffer(len)
+    var aa = new Uint32Array(abuf)
+    var aa8 = new Uint32Array(abuf)
+    var t0 = Date.now();
+    var cc = 222222;
+    for (var i=0; i<10000; i++) {
+    //    bbuf.fill(2, 0, len)
+        aa.fill(555552, 0, cc)
+    }
+    var t1 = Date.now()
+    console.log(t1-t0);
+    console.log(aa[cc-1], aa[cc])
+    console.log(aa8[2])
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <style>
+        #glFullscreen {
+            width: 100%;
+            height: 100vh;
+            min-width: 640px;
+            min-height: 360px;
+            position: relative;
+            overflow: hidden;
+            z-index: 0;
+        }
+        #example {
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            background-color: #000000;
+        }
+        #feedback {
+            color: darkorange;
+        }
+        #dat {
+            user-select: none;
+            position: absolute;
+            left: 0;
+            top: 0;
+            z-Index: 200;
+        }
+    </style>
+</head>
+
+<body>
+<div id="ttt2" style="display: none">
+    <div>dsfsdf</div>
+    <div>dsfsdf</div>
+    <div>dsfsdf</div>
+    <div>dsfsdf</div>
+
+
+
+</div>
+<div  style="position: relative;"><div id="draggable" >
+    <a href ="https://webglreport.com/?v=2">https://webglreport.com/?v=2</a><div>ttt</div>DDDDDDD<div>ttt</div><div>jjjj</div>
+</div></div>
+<div id="glFullscreen">
+    <canvas id="example" style="position:relative;"></canvas>
+</div>
+<div id="dat">
+
+</div>
+<script src="../lib/tween.umd.js"></script>
+<script type="text/javascript" src="../lib/dat.min.js"></script>
+
+<script>
+    //   texture
+
+
+
+
+
+
+
+
+
+    r.createTextureData = function(x, y) {
+        var size = x*y;
+        var a = new Uint8Array( size * 4);
+        for (var i=0; i<a.length; i++) a[i]=0;
+        var dd = {
+            width: x,
+            height: y,
+            data: a
+        };
+        return dd;
+    };
+
+    function  getAddrByCoords4(d, x, y, width) { // data, coords, width
+        return (4 * (y*width +x));
+    };
+
+    r.addCircle = function (dd, x, y, r) { // data object (width, heigth, data, step)
+        var w = dd.width;
+        var y0 = y-r;
+        if (y0<0) y0=0;
+        var y1 = y+r;
+        var x0 = x-r;
+        if (x0<0) x0=0;
+        var x1 = x+r;
+        if (x1>dd.width) x1 = dd.width;
+        if (y1>dd.height-1) y1=dd.height-1;
+        x1 = Math.trunc(x1);
+        y1 = Math.trunc(y1);
+        x0 = Math.trunc(x0);
+        y0 = Math.trunc(y0);
+
+        for (var i = y0; i<y1; i++) {
+            for (var j=x0; j<x1; j++) {
+                var adr = getAddrByCoords4(dd.data, j, i, dd.width);
+                var dx = j-x; var dy=i-y;
+                var r1 = Math.sqrt(dx*dx +dy*dy);
+                if (dx*dx + dy*dy < r*r) {
+                    dd.data[adr] = 255;
+                    dd.data[adr+3] = 1; //* r1/r;
+
+                }
+            }
+        }
+    };
+
+    r.circles = [
+        {x:43,y:43,r:30},
+        {x:133,y:43,r:30},
+        {x:43,y:133,r:30},
+        {x:133,y:133,r:30}
+    ];
+    for (var i=0; i<10000000; i++) {
+        //r.circles.push({x: Math.random()*100, y: Math.random()*100, r: 2})
+    }
+
+    r.addElements = function (dd, elements, cb) {
+        for (var i =0; i<elements.length; i++) {
+            cb(dd, elements[i].x, elements[i].y, elements[i].r);
+        }
+    };
+    r.addCircles = function (dd) {
+        var circles = r.circles;
+        dd.data.fill(0, 0, dd.data.length);
+        r.addElements(dd, circles, r.addCircle);
+    };
+
+
+
+
+    function getAAdr(geom, i, j) { // i - y, j - x
+        var arr = geom.attributes.position.array;
+        var nx = geom.parameters.widthSegments;
+        var ny = geom.parameters.heightSegments;
+        var addr = 3 * (i*nx + j);
+        return ({ar: arr, adr: addr});
+    };
+
+
+    let shader = {
+        'outline': {
+            vertex_shader: [
+                "uniform float offset;",
+                "void main() {",
+                "vec4 pos = modelViewMatrix * vec4( position + normal * offset, 1.0 );",
+                "gl_Position = projectionMatrix * pos;",
+                "}"
+            ].join("\n"),
+
+            fragment_shader: [
+                "void main(){",
+                "gl_FragColor = vec4( 1.0, 0.0, 0.0, 1.0 );",
+                "}"
+            ].join("\n")
+        }
+    };
+
+    'use strict';
+
+    import * as THREE from 'https://threejs.org/build/three.module.js';
+    // import {TWEEN} from '../lib/tween.umd.js';
+    import Stats from 'https://threejs.org/examples/jsm/libs/stats.module.js';
+    import { TrackballControls } from "https://threejs.org/examples/jsm/controls/TrackballControls.js";
+    import {GLTFLoader} from 'https://threejs.org/examples/jsm/loaders/GLTFLoader.js';
+    import {getApp1, Timer2} from "../mylib/lib.js";
+    //import {setTimers} from "./catTimers.js";
+    import {Effects} from "../mylib/effects.js";
+    import {Geom} from "../mylib/geom.js";
+    import {Debug} from "../mylib/debug.js";
+
+
+    let effects;
+    var db = Debug(THREE);
+
+
+    var stats;
+
+    let app = getApp1(THREE);
+    console.log('app', app);
+
+    app.loaded = false;
+    var exa = document.querySelector('#example');
+
+
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
+
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize( window.innerWidth, window.innerHeight );
+    document.body.appendChild( renderer.domElement );
+
+
+
+    var pg = new THREE.PlaneBufferGeometry(111, 111, 16,16);
+
+    var plane = new THREE.Mesh(pg, shMat);
+    plane.rotateX(-Math.PI/2);
+    plane.position.x=0;
+    plane.position.z=0;
+    app.ground = plane;
+    var k = 7;
+
+
+
+    //
+
+    var g2 = plane.geometry;
+    console.log('g2', g2);
+
+    for (var i=0; i<g2.parameters.widthSegments; i++) {
+        for (var j =0; j< g2.parameters.heightSegments; j++) {
+            var {ar, adr} = getAAdr(g2, i, j);
+            let x = ar[adr + 0];
+            let y = ar[adr + 1];
+            ar[adr+2] = F(x, y);
+        }
+    }
+
+    function F(x, y) {
+        return (x*x + y*y/2) / 100; // Math.sqr(x)
+    };
+
+    var claster = app.geom.clasterize(g2, 3, 3, 3);
+    //db.print(claster)
+    console.log('CCCCC',claster);
+
+
+
+
+    app.scene.add(plane);
+
+
+
+
+    function createObjects() {
+        effects = Effects({TWEEN: TWEEN, scene: app.scene});
+        app.elRows = 0;
+        app.elCols = 0;
+        app.nLights = 0;
+        app.obs = []; for (var i=0; i<app.elRows; i++) app.obs.push([]);
+        var props = app.renderer.properties;
+        console.log('props', props);
+
+        var cubeSize = 10;
+        const loader = new THREE.TextureLoader();
+
+        const shadowTexture = loader.load('teddy.jpg');
+
+        //var m2 = new THREE.MeshLambertMaterial( {   wireframe: true});
+        //m2.map = shadowTexture;
+        var g = new THREE.BoxGeometry(cubeSize,cubeSize,cubeSize);
+        var pg = new THREE.PlaneBufferGeometry(111, 111, 16,16);
+        //pg.vertices[0][1]=10;
+
+        var arr = pg.attributes.position.array;
+        //db.print(pg.attributes);
+        console.log('ATRR', pg.attributes);
+        console.log('texture', app.renderer.capabilities.maxTextureSize);
+
+
+
+
+        app.uniforms = {
+            ux: {type: 'f', value: 40.1},
+            uy: {type: 'f', value: 0.5},
+            texture1: {
+                type: 't',
+                value: shadowTexture
+            },
+            texture2: {
+                type: 't',
+                value: texture2
+            },
+            texData2: {
+                type: 't',
+                value: app.textureData2
+            },
+            dotsn: {
+                type: 'i', value: 3
+            },
+            dotsx: {
+                type: 'fv',
+                value: [
+                    // 10.0, -30.0, 20.0
+                ]
+            },
+            dotsy: {
+                type: 'fv',
+                value: [
+                    //    33.0, -35.0, 20.0
+                ]
+            }
+        };
+
+        var ndots = 120;
+
+        for (var i=0; i< ndots; i++) {
+            app.uniforms.dotsx.value.push(i);
+            app.uniforms.dotsy.value.push(i);
+        };
+        app.uniforms.dotsn.value = ndots;
+
+
+
+        app.shTextV = `
+            varying vec2 vUv;
+            //varying vec4 vColor;
+            varying vec4 pos2;
+            varying float he;
+            uniform float ux;
+            uniform float uy;
+            uniform float dotsx[120];
+            uniform float dotsy[120];
+            uniform int dotsn;
+            varying float tc2;
+            varying float tc1;
+            varying float tcn;
+            varying float vdata2;
+            uniform sampler2D texData2;
+
+            void main()
+            {
+            //vColor = gl_Color;
+            vUv = uv;
+                        vec4 data2 = texture2D(texData2, vUv);
+                        vdata2 = data2[0];
+
+
+            float dx = position[0] - ux;
+            float dy = position[1] - uy;
+
+            float r2 = (dx*dx + 3.0*dy*dy)*.001;
+            float change = 0.0;
+            if (r2 < 0.15) {
+              change = 1.0 - r2;
+            };
+            tc2 = r2; //change/1.0;
+            he = position[2];
+            vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+            float dx1 = mvPosition[0] - 0.8;
+            float dy1 = mvPosition[1];// - 0.1;
+            tc1 = (dx1*dx1 + dy1*dy1)*0.0029;
+            pos2 = projectionMatrix * mvPosition;
+            gl_Position = projectionMatrix * mvPosition;
+
+            //he = gl_Position[1];
+            //gl_Position[2] = position[0]*position[0];
+
+            //gl_Position = 1.0 * mvPosition;
+            //gl_Position = vec4( position* 1.2, 1.0 );s
+
+
+            for (int i=0; i<120; i++) {
+              dx = position[0] - dotsx[i];
+              dy = position[1] - dotsy[i];
+              float r = dx*dx + dy*dy;
+              if ( (dx*dx + dy*dy) < 200.0) {
+                //gl_Position[1] += r/11.; //+= 10.14102;
+                tcn = -0.99;
+              };
+            };
+            //if (dotsx[0] < position[0])
+            }
+        `;
+
+        app.shText = `
+            //varying vec4 vColor;
+            varying vec2 vUv;
+            varying vec4 pos2;
+            varying float he;
+            uniform sampler2D texture1;
+            uniform sampler2D texture2;
+            uniform sampler2D texData2;
+            uniform float ux;
+            uniform float uy;
+            varying float tc2;
+            varying float tc1;
+            varying float tcn;
+            varying float vdata2;
+
+
+            void main( void ) {
+
+            vec2 position = vUv; //-1.0 + 2.0 * vUv;
+            /*
+                float red = abs( sin( position.x * position.y + time / 5.0 ) );
+                float green = abs( sin( position.x * position.y + time / 4.0 ) );
+                float blue = abs( sin( position.x * position.y + time / 3.0 ) );
+                //gl_FragColor = vec4( red, green, blue, 1.0 );
+                float x = position[0];
+                float y = position[1];
+                float k = 10.0;
+                float c = fract(x*x*k + y*y*k)*(1.5 + sin(time/3.0));
+            */
+            float c = 0.2;
+            gl_FragColor = vec4( vUv[0], vUv[1] , position[1]*1.0, 0.0 );
+            gl_FragColor = texture2D(texture1, vUv*1.0);
+            vec4 dd = texture2D(texture2, vUv);
+            vec4 data2 = texture2D(texData2, vUv);
+
+            float dx = position[0] - ux;
+            float dy = position[1] - uy;
+            //if ((position[0] - ux)^2.0 && (position[1] > uy)) gl_FragColor[1] = 1.0;
+            float r2 = (dx*dx + dy*dy)*3.0;
+
+            if (r2 < 11110.101) {
+            //gl_FragColor[0] = 1.0;
+            gl_FragColor[1] = tc2;
+            //gl_FragColor[2] += tc1;
+            gl_FragColor[3] = 1.0 - r2;
+            //gl_FragColor[1] = he*.05;
+            };
+            //gl_FragColor[1] = tc2;
+            //gl_FragColor[0] += tc1;
+            gl_FragColor[2] += tcn;
+            float d23 = data2[3];
+            gl_FragColor[0] = d23*222222.0 * d23;
+            //gl_FragColor[0] = vdata2;
+            gl_FragColor[3] = 1.0;//data2[3];
+
+            }
+        `;
+
+
+
+        var shMat = effects.shaderMaterial2(app.shTextV, app.shText, app.uniforms);
+        //shMat.wireframe = true;
+        console.log(shMat);
+        //shMat.map = shadowTexture;
+
+
+
+
+        ///              DAT GUI
+        app.ooo = {
+            h1: 10
+        };
+        app.gui = new dat.gui.GUI();
+        app.gui.remember(app.ooo);
+        app.h1gui = app.gui.add(app.ooo, 'h1').min(0).max(20).step(1);
+        app.h1gui.onChange((e) => {
+            //console.log(pg);
+            pg.attributes.position.array[5*3+2]=e;
+            pg.attributes.position.needsUpdate = true;
+            //app.ground.geometry.veticesNeedUpdate = true;
+            //app.ground.geometry.position.needsUpdate  = true;
+        });
+
+
+
+        var plane = new THREE.Mesh(pg, shMat);
+        plane.rotateX(-Math.PI/2);
+        plane.position.x=0;
+        plane.position.z=0;
+        app.ground = plane;
+        var k = 7;
+
+
+
+        //
+
+        var g2 = plane.geometry;
+        console.log('g2', g2);
+
+        for (var i=0; i<g2.parameters.widthSegments; i++) {
+            for (var j =0; j< g2.parameters.heightSegments; j++) {
+                var {ar, adr} = getAAdr(g2, i, j);
+                let x = ar[adr + 0];
+                let y = ar[adr + 1];
+                ar[adr+2] = F(x, y);
+            }
+        }
+
+        function F(x, y) {
+            return (x*x + y*y/2) / 100; // Math.sqr(x)
+        };
+
+        var claster = app.geom.clasterize(g2, 3, 3, 3);
+//db.print(claster)
+        console.log('CCCCC',claster);
+
+
+
+
+        app.scene.add(plane);
+
+
+
+
+
+        console.log('plane', plane);
+        /*
+                // comment to no THREE.js shadows
+                app2.renderer.shadowMap.enabled = true;
+                app2.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                plane.receiveShadow = true;
+        */
+        for (var i=0; i<app.elRows; i++) {
+            for (var j=0; j<app.elCols; j++) {
+                var c = new THREE.Mesh(g, m2);
+                c.position.x= i*20;
+                c.position.z = j*20;
+                c.position.y = cubeSize/2;
+                c.castShadow = true;
+                app.obs[i][j] =c;
+                app.scene.add(app.obs[i][j]);
+            }
+        };
+
+        var ls = []; for (var i=0; i<app.nLights; i++) ls.push({});
+        app.lights = ls;
+
+        for (var i=0; i<app.lights.length; i++) {// color, intesity, distance, decay
+            var lb = effects.addLightBallParent( 0xffff00 + i*20, 2,    100,    1);
+            app.lights[i].lightBall = lb;
+            lb.li.castShadow = true;
+            //app2.scene.add(lb.li);
+            lb.position.x = 50;
+            lb.position.y = 50;
+            lb.position.z = i*15;
+            //lb.li.position.z = i*30;
+        }
+
+        for (var k =0; k<app.nLights; k++) {
+            for (var i=0; i<app.elRows; i++) {
+                for (var j=0; j<app.elCols; j++) {
+                    // comment no no shadows
+                    let l = addShadow5(app.ground, app.obs[i][j], app.lights[k].lightBall);
+                    shadows5.push(l);
+                }
+            }
+        }
+
+
+        //db.makeDrag(draggable);        dd = pt;        db.addDrag('Text2', app2.lights[1].lightBall);
+
+
+        db.print(k+1);
+
+    }; // create Objects
+
+
+</script>
+
+</body>
+</html>
